@@ -1,0 +1,35 @@
+# Polkas Backend Configuration
+# Copy this file to config.toml and fill in your values
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[kalshi]
+api_url = "https://api.kalshi.com"
+ws_url = "wss://api.kalshi.com"
+api_key = ""                    # Your Kalshi API key
+private_key_pem = ""            # Path to your Kalshi RSA private key PEM file
+rate_limit_per_second = 10
+min_profit_threshold = "0.01"   # Minimum profit threshold (1%)
+max_position_size = "10000"     # Maximum position size in USD
+
+[polymarket]
+api_url = "https://clob.polymarket.com"
+ws_url = "wss://ws-subscriptions-clob.polymarket.com"
+private_key = ""                # Your Polymarket wallet private key (0x...)
+chain_id = 137                  # Polygon mainnet
+gas_price_multiplier = "1.1"    # Gas price multiplier for faster transactions
+min_profit_threshold = "0.01"   # Minimum profit threshold (1%)
+max_position_size = "10000"     # Maximum position size in USD
+
+[arbitrage]
+min_profit_threshold = "0.005"  # Minimum profit threshold for arbitrage (0.5%)
+max_position_size = "5000"      # Maximum position size per arbitrage trade
+execution_timeout_ms = 5000     # Timeout for order execution in milliseconds
+retry_attempts = 3              # Number of retry attempts for failed orders
+retry_delay_ms = 100            # Delay between retry attempts in milliseconds
+
+[database]
+path = "polkas.db"              # SQLite database file path
+pool_size = 5                   # Database connection pool size
