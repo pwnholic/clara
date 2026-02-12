@@ -1,0 +1,53 @@
+[package]
+name = "polkas-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Async
+tokio = { version = "1", features = ["full"] }
+
+# Web
+axum = { version = "0.7", features = ["ws", "macros"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Polymarket SDK
+polymarket-client-sdk = { version = "0.4", features = ["ws", "clob"] }
+
+# Decimal for financial precision
+rust_decimal = { version = "1", features = ["serde-with-str", "serde-with-arbitrary-precision", "maths"] }
+num-traits = "0.2"
+
+# HTTP & WebSocket
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# RSA for Kalshi
+rsa = { version = "0.9", features = ["sha2"] }
+pkcs8 = { version = "0.10", features = ["pem"] }
+base64 = "0.22"
+hex = "0.4"
+
+# Database
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Utils
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1"
+anyhow = "1"
+parking_lot = "0.12"
+dashmap = "6"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+jsonwebtoken = "9"
+
+[dev-dependencies]
+tokio-test = "0.4"
