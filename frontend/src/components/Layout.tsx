@@ -1,12 +1,6 @@
 import { ReactNode } from "react";
 import clsx from "clsx";
-import {
-  Wifi,
-  WifiOff,
-  Activity,
-  TrendingUp,
-  Clock,
-} from "lucide-react";
+import { Wifi, WifiOff, Activity, TrendingUp, Clock } from "lucide-react";
 import { formatRelativeTime } from "@/utils/format";
 
 interface LayoutProps {

@@ -14,7 +14,7 @@ graph TB
         UI[React/TypeScript UI]
         WS[WebSocket Client]
     end
-    
+
     subgraph Backend
         API[Axum HTTP API]
         WSH[WebSocket Handler]
@@ -22,21 +22,21 @@ graph TB
         CALC[Calculator]
         MATCH[Market Matcher]
     end
-    
+
     subgraph Clients
         KC[Kalshi Client]
         PC[Polymarket Client]
     end
-    
+
     subgraph Storage
         DB[SQLite Database]
     end
-    
+
     subgraph External
         KAL[Kalshi API]
         POLY[Polymarket CLOB]
     end
-    
+
     UI --> API
     UI --> WS
     WS --> WSH
@@ -91,6 +91,7 @@ polkas/
 ## Technology Stack
 
 ### Backend
+
 - **Rust** - Systems programming language
 - **Axum** - Web framework
 - **Tokio** - Async runtime
@@ -99,6 +100,7 @@ polkas/
 - **SQLite** - Local database for trade history and settings
 
 ### Frontend
+
 - **React 18** - UI framework
 - **TypeScript** - Type-safe JavaScript
 - **Vite** - Build tool
@@ -108,6 +110,7 @@ polkas/
 ## Quick Start
 
 ### Prerequisites
+
 - Rust 1.70+
 - Node.js 18+
 - npm or yarn
@@ -115,11 +118,13 @@ polkas/
 ### Backend Setup
 
 1. Copy the example config:
+
 ```bash
 cp backend/config.example.toml backend/config.toml
 ```
 
 2. Edit `config.toml` with your API credentials:
+
 ```toml
 [kalshi]
 api_key = "your-kalshi-api-key"
@@ -130,6 +135,7 @@ private_key = "your-wallet-private-key"
 ```
 
 3. Run the backend:
+
 ```bash
 cd backend
 cargo run --release
@@ -138,12 +144,14 @@ cargo run --release
 ### Frontend Setup
 
 1. Install dependencies:
+
 ```bash
 cd frontend
 npm install
 ```
 
 2. Run development server:
+
 ```bash
 npm run dev
 ```
@@ -152,18 +160,18 @@ npm run dev
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/opportunities` | GET | List arbitrage opportunities |
-| `/api/markets` | GET | List matched markets |
-| `/api/orders` | GET/POST | List/create orders |
-| `/api/orders/:id` | DELETE | Cancel order |
-| `/api/accounts/balance` | GET | Get account balances |
-| `/api/accounts/positions` | GET | Get positions |
-| `/api/history` | GET | Trade history |
-| `/api/auto-trade` | GET/POST | Auto-trade settings |
-| `/ws` | GET | WebSocket connection |
+| Endpoint                  | Method   | Description                  |
+| ------------------------- | -------- | ---------------------------- |
+| `/api/health`             | GET      | Health check                 |
+| `/api/opportunities`      | GET      | List arbitrage opportunities |
+| `/api/markets`            | GET      | List matched markets         |
+| `/api/orders`             | GET/POST | List/create orders           |
+| `/api/orders/:id`         | DELETE   | Cancel order                 |
+| `/api/accounts/balance`   | GET      | Get account balances         |
+| `/api/accounts/positions` | GET      | Get positions                |
+| `/api/history`            | GET      | Trade history                |
+| `/api/auto-trade`         | GET/POST | Auto-trade settings          |
+| `/ws`                     | GET      | WebSocket connection         |
 
 ## WebSocket Messages
 
@@ -173,16 +181,16 @@ sequenceDiagram
     participant Server
     participant Kalshi
     participant Polymarket
-    
+
     Client->>Server: Connect /ws
     Server->>Client: Connection acknowledged
-    
+
     loop Price Updates
         Kalshi->>Server: Price update
         Polymarket->>Server: Price update
         Server->>Client: Opportunities update
     end
-    
+
     Client->>Server: Execute arbitrage
     Server->>Kalshi: Place order
     Server->>Polymarket: Place order
@@ -192,6 +200,7 @@ sequenceDiagram
 ### Message Types
 
 **Opportunities**
+
 ```json
 {
   "type": "opportunities",
@@ -200,6 +209,7 @@ sequenceDiagram
 ```
 
 **Metrics**
+
 ```json
 {
   "type": "metrics",
@@ -241,63 +251,71 @@ Profit Margin = (Net Profit / Position Size) * 100
 ## Configuration Reference
 
 ### Server
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| host | string | 0.0.0.0 | Server bind address |
-| port | number | 8080 | Server port |
+
+| Field | Type   | Default | Description         |
+| ----- | ------ | ------- | ------------------- |
+| host  | string | 0.0.0.0 | Server bind address |
+| port  | number | 8080    | Server port         |
 
 ### Kalshi
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| api_url | string | https://api.kalshi.com | Kalshi API URL |
-| ws_url | string | wss://api.kalshi.com | Kalshi WebSocket URL |
-| api_key | string | - | Your API key |
-| private_key_pem | string | - | RSA private key path |
-| rate_limit_per_second | number | 10 | API rate limit |
-| min_profit_threshold | decimal | 0.01 | Minimum profit (1%) |
-| max_position_size | decimal | 10000 | Max position in USD |
+
+| Field                 | Type    | Default                | Description          |
+| --------------------- | ------- | ---------------------- | -------------------- |
+| api_url               | string  | https://api.kalshi.com | Kalshi API URL       |
+| ws_url                | string  | wss://api.kalshi.com   | Kalshi WebSocket URL |
+| api_key               | string  | -                      | Your API key         |
+| private_key_pem       | string  | -                      | RSA private key path |
+| rate_limit_per_second | number  | 10                     | API rate limit       |
+| min_profit_threshold  | decimal | 0.01                   | Minimum profit (1%)  |
+| max_position_size     | decimal | 10000                  | Max position in USD  |
 
 ### Polymarket
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| api_url | string | https://clob.polymarket.com | CLOB API URL |
-| ws_url | string | wss://ws-subscriptions-clob.polymarket.com | WebSocket URL |
-| private_key | string | - | Wallet private key |
-| chain_id | number | 137 | Polygon chain ID |
-| gas_price_multiplier | decimal | 1.1 | Gas price multiplier |
-| min_profit_threshold | decimal | 0.01 | Minimum profit (1%) |
-| max_position_size | decimal | 10000 | Max position in USD |
+
+| Field                | Type    | Default                                    | Description          |
+| -------------------- | ------- | ------------------------------------------ | -------------------- |
+| api_url              | string  | https://clob.polymarket.com                | CLOB API URL         |
+| ws_url               | string  | wss://ws-subscriptions-clob.polymarket.com | WebSocket URL        |
+| private_key          | string  | -                                          | Wallet private key   |
+| chain_id             | number  | 137                                        | Polygon chain ID     |
+| gas_price_multiplier | decimal | 1.1                                        | Gas price multiplier |
+| min_profit_threshold | decimal | 0.01                                       | Minimum profit (1%)  |
+| max_position_size    | decimal | 10000                                      | Max position in USD  |
 
 ### Arbitrage
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| min_profit_threshold | decimal | 0.005 | Minimum profit (0.5%) |
-| max_position_size | decimal | 5000 | Max position per trade |
-| execution_timeout_ms | number | 5000 | Order timeout |
-| retry_attempts | number | 3 | Retry count |
-| retry_delay_ms | number | 100 | Retry delay |
+
+| Field                | Type    | Default | Description            |
+| -------------------- | ------- | ------- | ---------------------- |
+| min_profit_threshold | decimal | 0.005   | Minimum profit (0.5%)  |
+| max_position_size    | decimal | 5000    | Max position per trade |
+| execution_timeout_ms | number  | 5000    | Order timeout          |
+| retry_attempts       | number  | 3       | Retry count            |
+| retry_delay_ms       | number  | 100     | Retry delay            |
 
 ### Database
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| path | string | polkas.db | SQLite file path |
-| pool_size | number | 5 | Connection pool size |
+
+| Field     | Type   | Default   | Description          |
+| --------- | ------ | --------- | -------------------- |
+| path      | string | polkas.db | SQLite file path     |
+| pool_size | number | 5         | Connection pool size |
 
 ## Development
 
 ### Build Backend
+
 ```bash
 cd backend
 cargo build --release
 ```
 
 ### Build Frontend
+
 ```bash
 cd frontend
 npm run build
 ```
 
 ### Run Tests
+
 ```bash
 cd backend
 cargo test
