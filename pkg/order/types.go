@@ -3,8 +3,10 @@ package order
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/pwnholic/clara/pkg/errors"
 	"github.com/pwnholic/clara/pkg/market"
 	"github.com/quagmt/udecimal"
 )
@@ -22,48 +24,69 @@ const (
 	TypeTrailingStop
 )
 
-// String returns the string representation of the order type.
+// String implements fmt.Stringer.
 func (t Type) String() string {
 	switch t {
 	case TypeLimit:
-		return "limit"
+		return "LIMIT"
 	case TypeMarket:
-		return "market"
+		return "MARKET"
 	case TypeStopLoss:
-		return "stop_loss"
+		return "STOP_LOSS"
 	case TypeStopLossLimit:
-		return "stop_loss_limit"
+		return "STOP_LOSS_LIMIT"
 	case TypeTakeProfit:
-		return "take_profit"
+		return "TAKE_PROFIT"
 	case TypeTakeProfitLimit:
-		return "take_profit_limit"
+		return "TAKE_PROFIT_LIMIT"
 	case TypeTrailingStop:
-		return "trailing_stop"
+		return "TRAILING_STOP"
 	default:
-		return "unknown"
+		return "UNKNOWN"
 	}
 }
 
-// ParseType parses a string into a Type.
-func ParseType(s string) (Type, error) {
-	switch s {
-	case "limit", "LIMIT", "Limit":
-		return TypeLimit, nil
-	case "market", "MARKET", "Market":
-		return TypeMarket, nil
-	case "stop_loss", "STOP_LOSS":
-		return TypeStopLoss, nil
-	case "stop_loss_limit", "STOP_LOSS_LIMIT":
-		return TypeStopLossLimit, nil
-	case "take_profit", "TAKE_PROFIT":
-		return TypeTakeProfit, nil
-	case "take_profit_limit", "TAKE_PROFIT_LIMIT":
-		return TypeTakeProfitLimit, nil
-	case "trailing_stop", "TRAILING_STOP":
-		return TypeTrailingStop, nil
+// MarshalText implements encoding.TextMarshaler.
+func (t Type) MarshalText() ([]byte, error) {
+	return []byte(t.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (t *Type) UnmarshalText(text []byte) error {
+	switch strings.ToUpper(string(text)) {
+	case "LIMIT":
+		*t = TypeLimit
+	case "MARKET":
+		*t = TypeMarket
+	case "STOP_LOSS", "STOP", "STOP_MARKET":
+		*t = TypeStopLoss
+	case "STOP_LOSS_LIMIT", "STOP_LIMIT":
+		*t = TypeStopLossLimit
+	case "TAKE_PROFIT", "TAKE_PROFIT_MARKET":
+		*t = TypeTakeProfit
+	case "TAKE_PROFIT_LIMIT":
+		*t = TypeTakeProfitLimit
+	case "TRAILING_STOP":
+		*t = TypeTrailingStop
 	default:
-		return TypeLimit, fmt.Errorf("invalid order type: %s", s)
+		return errors.NewValidationError("type", fmt.Sprintf("unknown order type: %s", string(text)))
 	}
+	return nil
+}
+
+// IsLimit returns true if this is a limit-type order.
+func (t Type) IsLimit() bool {
+	return t == TypeLimit || t == TypeStopLossLimit || t == TypeTakeProfitLimit
+}
+
+// IsMarket returns true if this is a market-type order.
+func (t Type) IsMarket() bool {
+	return t == TypeMarket || t == TypeStopLoss || t == TypeTakeProfit
+}
+
+// IsTrigger returns true if this is a trigger/conditional order.
+func (t Type) IsTrigger() bool {
+	return t == TypeStopLoss || t == TypeStopLossLimit || t == TypeTakeProfit || t == TypeTakeProfitLimit || t == TypeTrailingStop
 }
 
 // Status represents the order status.
@@ -76,120 +99,139 @@ const (
 	StatusCancelled
 	StatusRejected
 	StatusExpired
+	StatusPendingCancel
 )
 
-// String returns the string representation of the order status.
+// String implements fmt.Stringer.
 func (s Status) String() string {
 	switch s {
 	case StatusNew:
-		return "new"
+		return "NEW"
 	case StatusPartiallyFilled:
-		return "partially_filled"
+		return "PARTIALLY_FILLED"
 	case StatusFilled:
-		return "filled"
+		return "FILLED"
 	case StatusCancelled:
-		return "cancelled"
+		return "CANCELLED"
 	case StatusRejected:
-		return "rejected"
+		return "REJECTED"
 	case StatusExpired:
-		return "expired"
+		return "EXPIRED"
+	case StatusPendingCancel:
+		return "PENDING_CANCEL"
 	default:
-		return "unknown"
+		return "UNKNOWN"
 	}
 }
 
-// ParseStatus parses a string into a Status.
-func ParseStatus(s string) (Status, error) {
-	switch s {
-	case "new", "NEW", "New":
-		return StatusNew, nil
-	case "partially_filled", "PARTIALLY_FILLED", "PartiallyFilled":
-		return StatusPartiallyFilled, nil
-	case "filled", "FILLED", "Filled":
-		return StatusFilled, nil
-	case "cancelled", "CANCELED", "CANCELLED", "Cancelled":
-		return StatusCancelled, nil
-	case "rejected", "REJECTED", "Rejected":
-		return StatusRejected, nil
-	case "expired", "EXPIRED", "Expired":
-		return StatusExpired, nil
+// MarshalText implements encoding.TextMarshaler.
+func (s Status) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (s *Status) UnmarshalText(text []byte) error {
+	switch strings.ToUpper(string(text)) {
+	case "NEW", "PENDING":
+		*s = StatusNew
+	case "PARTIALLY_FILLED", "PARTIALLYFILLED":
+		*s = StatusPartiallyFilled
+	case "FILLED", "FILL":
+		*s = StatusFilled
+	case "CANCELLED", "CANCELED":
+		*s = StatusCancelled
+	case "REJECTED":
+		*s = StatusRejected
+	case "EXPIRED":
+		*s = StatusExpired
+	case "PENDING_CANCEL":
+		*s = StatusPendingCancel
 	default:
-		return StatusNew, fmt.Errorf("invalid order status: %s", s)
+		return errors.NewValidationError("status", fmt.Sprintf("unknown order status: %s", string(text)))
 	}
+	return nil
+}
+
+// IsActive returns true if the order is still active.
+func (s Status) IsActive() bool {
+	return s == StatusNew || s == StatusPartiallyFilled || s == StatusPendingCancel
+}
+
+// IsTerminal returns true if the order is in a terminal state.
+func (s Status) IsTerminal() bool {
+	return s == StatusFilled || s == StatusCancelled || s == StatusRejected || s == StatusExpired
 }
 
 // TimeInForce represents the time in force for an order.
 type TimeInForce int
 
 const (
-	TIFGoodTillCancel TimeInForce = iota // GTC
-	TIFImmediateOrCancel                 // IOC
-	TIFillOrKill                         // FOK
-	TIFGoodTillCrossing                  // GTX (Post Only)
+	GTC TimeInForce = iota // Good Till Cancel
+	IOC                     // Immediate or Cancel
+	FOK                     // Fill or Kill
+	GTX                     // Good Till Crossing (Post Only)
 )
 
-// String returns the string representation of the time in force.
+// String implements fmt.Stringer.
 func (t TimeInForce) String() string {
 	switch t {
-	case TIFGoodTillCancel:
+	case GTC:
 		return "GTC"
-	case TIFImmediateOrCancel:
+	case IOC:
 		return "IOC"
-	case TIFillOrKill:
+	case FOK:
 		return "FOK"
-	case TIFGoodTillCrossing:
+	case GTX:
 		return "GTX"
 	default:
 		return "UNKNOWN"
 	}
 }
 
+// MarshalText implements encoding.TextMarshaler.
+func (t TimeInForce) MarshalText() ([]byte, error) {
+	return []byte(t.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler.
+func (t *TimeInForce) UnmarshalText(text []byte) error {
+	switch strings.ToUpper(string(text)) {
+	case "GTC":
+		*t = GTC
+	case "IOC":
+		*t = IOC
+	case "FOK":
+		*t = FOK
+	case "GTX", "POST_ONLY":
+		*t = GTX
+	default:
+		return errors.NewValidationError("time_in_force", fmt.Sprintf("unknown time in force: %s", string(text)))
+	}
+	return nil
+}
+
 // Order represents a normalized order.
 type Order struct {
-	// ID is the exchange-assigned order ID.
-	ID string
+	ID           string           `json:"id"`
+	ClientID     string           `json:"client_id,omitempty"`
+	Symbol       market.Symbol    `json:"symbol"`
+	Side         market.Side      `json:"side"`
+	Type         Type             `json:"type"`
+	Status       Status           `json:"status"`
+	Price        udecimal.Decimal `json:"price"`
+	Quantity     udecimal.Decimal `json:"quantity"`
+	ExecutedQty  udecimal.Decimal `json:"executed_qty"`
+	AvgPrice     udecimal.Decimal `json:"avg_price"`
+	StopPrice    udecimal.Decimal `json:"stop_price,omitempty"`
+	TimeInForce  TimeInForce      `json:"time_in_force"`
+	ReduceOnly   bool             `json:"reduce_only"`
+	CreatedAt    time.Time        `json:"created_at"`
+	UpdatedAt    time.Time        `json:"updated_at"`
+}
 
-	// ClientID is the client-specified order ID (optional).
-	ClientID string
-
-	// Symbol is the trading pair.
-	Symbol market.Symbol
-
-	// Side is the order side (buy/sell).
-	Side market.Side
-
-	// Type is the order type.
-	Type Type
-
-	// Status is the current order status.
-	Status Status
-
-	// Price is the limit price (for limit orders).
-	Price udecimal.Decimal
-
-	// Quantity is the original order quantity.
-	Quantity udecimal.Decimal
-
-	// ExecutedQty is the quantity that has been filled.
-	ExecutedQty udecimal.Decimal
-
-	// RemainingQty is the quantity remaining to be filled.
-	RemainingQty udecimal.Decimal
-
-	// AvgPrice is the average execution price.
-	AvgPrice udecimal.Decimal
-
-	// StopPrice is the trigger price for stop orders.
-	StopPrice udecimal.Decimal
-
-	// TimeInForce is the time in force policy.
-	TimeInForce TimeInForce
-
-	// CreatedAt is when the order was created.
-	CreatedAt time.Time
-
-	// UpdatedAt is when the order was last updated.
-	UpdatedAt time.Time
+// RemainingQty returns the remaining quantity to be filled.
+func (o Order) RemainingQty() udecimal.Decimal {
+	return o.Quantity.Sub(o.ExecutedQty)
 }
 
 // IsFilled returns true if the order is fully filled.
@@ -199,7 +241,7 @@ func (o Order) IsFilled() bool {
 
 // IsOpen returns true if the order is still active.
 func (o Order) IsOpen() bool {
-	return o.Status == StatusNew || o.Status == StatusPartiallyFilled
+	return o.Status.IsActive()
 }
 
 // IsCancelled returns true if the order is cancelled.
@@ -207,77 +249,82 @@ func (o Order) IsCancelled() bool {
 	return o.Status == StatusCancelled
 }
 
-// FillPercent returns the percentage of the order that has been filled.
+// FillPercent returns the percentage of the order that has been filled (0-1).
 func (o Order) FillPercent() (udecimal.Decimal, error) {
 	if o.Quantity.IsZero() {
-		return udecimal.Decimal{}, fmt.Errorf("quantity is zero")
+		return udecimal.Decimal{}, errors.NewValidationError("quantity", "quantity is zero")
 	}
 	return o.ExecutedQty.Div(o.Quantity)
 }
 
-// OrderRequest represents a request to place a new order.
-type OrderRequest struct {
-	// Symbol is the trading pair (required).
-	Symbol market.Symbol
+// IsFilledPercent returns true if at least pct% of the order is filled.
+func (o Order) IsFilledPercent(pct udecimal.Decimal) (bool, error) {
+	fillPct, err := o.FillPercent()
+	if err != nil {
+		return false, err
+	}
+	return fillPct.GreaterThanOrEqual(pct), nil
+}
 
-	// Side is the order side (required).
-	Side market.Side
-
-	// Type is the order type (required).
-	Type Type
-
-	// Quantity is the order quantity (required).
-	Quantity udecimal.Decimal
-
-	// Price is the limit price (required for limit orders).
-	Price udecimal.Decimal
-
-	// StopPrice is the trigger price (required for stop orders).
-	StopPrice udecimal.Decimal
-
-	// TimeInForce is the time in force policy.
-	TimeInForce TimeInForce
-
-	// ClientID is a client-specified order ID (optional).
-	ClientID string
-
-	// ReduceOnly marks the order as reduce-only for futures.
-	ReduceOnly bool
+// Request represents a request to place a new order.
+type Request struct {
+	Symbol      market.Symbol    `json:"symbol"`
+	Side        market.Side      `json:"side"`
+	Type        Type             `json:"type"`
+	Quantity    udecimal.Decimal `json:"quantity"`
+	Price       udecimal.Decimal `json:"price,omitempty"`
+	StopPrice   udecimal.Decimal `json:"stop_price,omitempty"`
+	TimeInForce TimeInForce      `json:"time_in_force,omitempty"`
+	ClientID    string           `json:"client_id,omitempty"`
+	ReduceOnly  bool             `json:"reduce_only,omitempty"`
 }
 
 // Validate validates the order request.
-func (r OrderRequest) Validate() error {
-	if r.Symbol == "" {
-		return fmt.Errorf("symbol is required")
+func (r *Request) Validate() error {
+	if !r.Symbol.IsValid() {
+		return errors.NewValidationError("symbol", "symbol is required")
 	}
 	if r.Quantity.IsZero() {
-		return fmt.Errorf("quantity is required")
+		return errors.NewValidationError("quantity", "quantity is required and must be positive")
 	}
-	if r.Type == TypeLimit && r.Price.IsZero() {
-		return fmt.Errorf("price is required for limit orders")
+	if r.Quantity.IsNeg() {
+		return errors.NewValidationError("quantity", "quantity must be positive")
+	}
+	if r.Type.IsLimit() && r.Price.IsZero() {
+		return errors.NewValidationError("price", "price is required for limit orders")
+	}
+	if r.Type.IsTrigger() && r.StopPrice.IsZero() {
+		return errors.NewValidationError("stop_price", "stop price is required for trigger orders")
 	}
 	return nil
 }
 
 // CancelRequest represents a request to cancel an order.
 type CancelRequest struct {
-	// Symbol is the trading pair (required).
-	Symbol market.Symbol
-
-	// OrderID is the exchange-assigned order ID.
-	OrderID string
-
-	// ClientID is the client-specified order ID.
-	ClientID string
+	Symbol   market.Symbol `json:"symbol"`
+	OrderID  string        `json:"order_id,omitempty"`
+	ClientID string        `json:"client_id,omitempty"`
 }
 
 // Validate validates the cancel request.
-func (r CancelRequest) Validate() error {
-	if r.Symbol == "" {
-		return fmt.Errorf("symbol is required")
+func (r *CancelRequest) Validate() error {
+	if !r.Symbol.IsValid() {
+		return errors.NewValidationError("symbol", "symbol is required")
 	}
 	if r.OrderID == "" && r.ClientID == "" {
-		return fmt.Errorf("order_id or client_id is required")
+		return errors.NewValidationError("order_id", "order_id or client_id is required")
 	}
 	return nil
+}
+
+// Balance represents the balance of a single asset.
+type Balance struct {
+	Asset  string           `json:"asset"`
+	Free   udecimal.Decimal `json:"free"`
+	Locked udecimal.Decimal `json:"locked"`
+}
+
+// Total returns the total balance (free + locked).
+func (b Balance) Total() udecimal.Decimal {
+	return b.Free.Add(b.Locked)
 }

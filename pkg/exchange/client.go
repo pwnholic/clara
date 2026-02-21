@@ -5,91 +5,158 @@ package exchange
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
 
+	"github.com/pwnholic/clara/pkg/errors"
 	"github.com/pwnholic/clara/pkg/market"
+	"github.com/pwnholic/clara/pkg/order"
 	"github.com/pwnholic/clara/pkg/stream"
 )
 
-// ProviderName identifies a specific exchange provider.
-type ProviderName string
+// Provider identifies a specific exchange provider.
+type Provider string
 
 const (
-	// ProviderBinance is the Binance exchange provider.
-	ProviderBinance ProviderName = "binance"
-
-	// ProviderBybit is the Bybit exchange provider.
-	ProviderBybit ProviderName = "bybit"
+	ProviderBinance Provider = "binance"
+	ProviderBybit   Provider = "bybit"
 )
 
-// String returns the string representation of the provider name.
-func (p ProviderName) String() string {
+// String implements fmt.Stringer.
+func (p Provider) String() string {
 	return string(p)
 }
 
-// ClientConfig holds configuration for creating an exchange client.
-type ClientConfig struct {
-	// Provider is the exchange provider to use (required).
-	Provider ProviderName
+// IsValid returns true if the provider is valid.
+func (p Provider) IsValid() bool {
+	switch p {
+	case ProviderBinance, ProviderBybit:
+		return true
+	default:
+		return false
+	}
+}
 
-	// APIKey is the API key for authenticated requests.
-	APIKey string
+// Option is a functional option for configuring the client.
+type Option func(*Options)
 
-	// APISecret is the API secret for signing requests.
+// Options holds all configuration options for the exchange client.
+type Options struct {
+	// Authentication
+	APIKey    string
 	APISecret string
+	Passphrase string // Required for some exchanges (e.g., OKX)
 
-	// Passphrase is required by some exchanges (e.g., OKX).
-	Passphrase string
-
-	// Testnet enables testnet mode if supported.
+	// Environment
 	Testnet bool
 
-	// Timeout is the request timeout in milliseconds.
-	// Default: 10000 (10 seconds)
-	Timeout int
+	// HTTP settings
+	HTTPClient *http.Client
+	Timeout    time.Duration
+	RetryCount int
+	RetryDelay time.Duration
 
-	// StreamConfig is the configuration for stream connections.
-	StreamConfig stream.StreamConfig
+	// Stream settings
+	StreamConfig stream.Config
 
-	// Debug enables debug logging.
+	// Debug
 	Debug bool
+	Logger interface{ Debug(msg string, fields ...interface{}) }
 }
 
-// Validate validates the client configuration.
-func (c ClientConfig) Validate() error {
-	if c.Provider == "" {
-		return fmt.Errorf("provider is required")
+// DefaultOptions returns Options with sensible defaults.
+func DefaultOptions() Options {
+	return Options{
+		Timeout:      30 * time.Second,
+		RetryCount:   3,
+		RetryDelay:   time.Second,
+		StreamConfig: stream.DefaultConfig(),
 	}
-
-	// Validate provider is registered
-	if !IsProviderRegistered(c.Provider) {
-		return fmt.Errorf("provider %q is not registered", c.Provider)
-	}
-
-	if c.Timeout < 0 {
-		return fmt.Errorf("timeout must be non-negative, got %d", c.Timeout)
-	}
-
-	return c.StreamConfig.Validate()
 }
 
-// ExchangeClient is the primary interface for interacting with exchanges.
-// All methods return normalized types from the market package.
-//
-// Usage:
-//
-//	cfg := exchange.ClientConfig{
-//	    Provider:  exchange.ProviderBinance,
-//	    APIKey:    "your-api-key",
-//	    APISecret: "your-api-secret",
-//	}
-//	client, err := exchange.NewClient(cfg)
-//	if err != nil {
-//	    return err
-//	}
-//	defer client.Close()
-type ExchangeClient interface {
-	// Provider returns the name of this exchange provider.
-	Provider() ProviderName
+// WithAPIKey sets the API key.
+func WithAPIKey(key string) Option {
+	return func(o *Options) {
+		o.APIKey = key
+	}
+}
+
+// WithAPISecret sets the API secret.
+func WithAPISecret(secret string) Option {
+	return func(o *Options) {
+		o.APISecret = secret
+	}
+}
+
+// WithPassphrase sets the passphrase (for exchanges that require it).
+func WithPassphrase(passphrase string) Option {
+	return func(o *Options) {
+		o.Passphrase = passphrase
+	}
+}
+
+// WithTestnet enables testnet mode.
+func WithTestnet() Option {
+	return func(o *Options) {
+		o.Testnet = true
+	}
+}
+
+// WithHTTPClient sets a custom HTTP client.
+func WithHTTPClient(client *http.Client) Option {
+	return func(o *Options) {
+		o.HTTPClient = client
+	}
+}
+
+// WithTimeout sets the request timeout.
+func WithTimeout(timeout time.Duration) Option {
+	return func(o *Options) {
+		o.Timeout = timeout
+	}
+}
+
+// WithRetry sets the retry configuration.
+func WithRetry(count int, delay time.Duration) Option {
+	return func(o *Options) {
+		o.RetryCount = count
+		o.RetryDelay = delay
+	}
+}
+
+// WithStreamConfig sets the stream configuration.
+func WithStreamConfig(cfg stream.Config) Option {
+	return func(o *Options) {
+		o.StreamConfig = cfg
+	}
+}
+
+// WithDebug enables debug mode.
+func WithDebug() Option {
+	return func(o *Options) {
+		o.Debug = true
+	}
+}
+
+// Validate validates the options.
+func (o Options) Validate() error {
+	if o.Timeout <= 0 {
+		return errors.NewValidationError("timeout", "must be positive")
+	}
+	if o.RetryCount < 0 {
+		return errors.NewValidationError("retry_count", "must be non-negative")
+	}
+	if err := o.StreamConfig.Validate(); err != nil {
+		return fmt.Errorf("stream config: %w", err)
+	}
+	return nil
+}
+
+// Client is the primary interface for interacting with exchanges.
+// All methods return normalized types from the market and order packages.
+type Client interface {
+	// Provider returns the exchange provider name.
+	Provider() Provider
 
 	// Connect establishes connections to the exchange.
 	// Must be called before using stream methods.
@@ -100,7 +167,7 @@ type ExchangeClient interface {
 
 	// --- Market Data Streams ---
 
-	// TickerStream returns a stream of ticker updates for the given symbol.
+	// TickerStream returns a stream of ticker updates.
 	TickerStream(symbol market.Symbol) stream.Stream[market.Ticker]
 
 	// OrderBookStream returns a stream of order book updates.
@@ -111,10 +178,9 @@ type ExchangeClient interface {
 	TradeStream(symbol market.Symbol) stream.Stream[market.Trade]
 
 	// KlineStream returns a stream of kline/candlestick updates.
-	// Interval specifies the kline interval (e.g., "1m", "5m", "1h", "1d").
-	KlineStream(symbol market.Symbol, interval string) stream.Stream[market.Kline]
+	KlineStream(symbol market.Symbol, interval market.KlineInterval) stream.Stream[market.Kline]
 
-	// --- REST API Methods ---
+	// --- REST API: Market Data ---
 
 	// GetTicker fetches the current ticker for a symbol.
 	GetTicker(ctx context.Context, symbol market.Symbol) (*market.Ticker, error)
@@ -126,51 +192,80 @@ type ExchangeClient interface {
 	GetTrades(ctx context.Context, symbol market.Symbol, limit int) ([]market.Trade, error)
 
 	// GetKlines fetches historical kline data.
-	GetKlines(ctx context.Context, symbol market.Symbol, interval string, limit int) ([]market.Kline, error)
+	GetKlines(ctx context.Context, symbol market.Symbol, interval market.KlineInterval, limit int) ([]market.Kline, error)
+
+	// GetSymbols fetches all available trading symbols.
+	GetSymbols(ctx context.Context) ([]market.Symbol, error)
+
+	// --- REST API: Trading ---
+
+	// PlaceOrder places a new order.
+	PlaceOrder(ctx context.Context, req *order.Request) (*order.Order, error)
+
+	// CancelOrder cancels an existing order.
+	CancelOrder(ctx context.Context, req *order.CancelRequest) error
+
+	// GetOrder fetches an order by ID.
+	GetOrder(ctx context.Context, symbol market.Symbol, orderID string) (*order.Order, error)
+
+	// GetOpenOrders fetches all open orders.
+	GetOpenOrders(ctx context.Context, symbol market.Symbol) ([]order.Order, error)
+
+	// --- REST API: Account ---
+
+	// GetBalance fetches account balances.
+	GetBalance(ctx context.Context) ([]order.Balance, error)
 }
 
-// ProviderFactory is a function that creates an ExchangeClient for a specific provider.
-type ProviderFactory func(cfg ClientConfig) (ExchangeClient, error)
+// Factory creates a Client for a specific provider.
+type Factory func(opts Options) (Client, error)
 
 // registry holds registered provider factories.
-var registry = make(map[ProviderName]ProviderFactory)
+var registry = make(map[Provider]Factory)
 
-// RegisterProvider registers a provider factory.
+// Register registers a provider factory.
 // Panics if the provider is already registered.
-// This should be called in init() of provider packages.
-func RegisterProvider(name ProviderName, factory ProviderFactory) {
-	if _, exists := registry[name]; exists {
-		panic(fmt.Sprintf("provider %q already registered", name))
+func Register(p Provider, f Factory) {
+	if _, exists := registry[p]; exists {
+		panic(fmt.Sprintf("provider %q already registered", p))
 	}
-	registry[name] = factory
+	registry[p] = f
 }
 
-// IsProviderRegistered returns true if the provider is registered.
-func IsProviderRegistered(name ProviderName) bool {
-	_, exists := registry[name]
-	return exists
+// IsRegistered returns true if the provider is registered.
+func IsRegistered(p Provider) bool {
+	_, ok := registry[p]
+	return ok
 }
 
-// RegisteredProviders returns a list of all registered provider names.
-func RegisteredProviders() []ProviderName {
-	providers := make([]ProviderName, 0, len(registry))
-	for name := range registry {
-		providers = append(providers, name)
+// Providers returns a list of all registered providers.
+func Providers() []Provider {
+	providers := make([]Provider, 0, len(registry))
+	for p := range registry {
+		providers = append(providers, p)
 	}
 	return providers
 }
 
-// NewClient creates a new ExchangeClient for the given configuration.
-// The provider must be registered before calling this function.
-func NewClient(cfg ClientConfig) (ExchangeClient, error) {
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+// New creates a new Client for the given provider.
+func New(p Provider, opts ...Option) (Client, error) {
+	if !p.IsValid() {
+		return nil, errors.NewValidationError("provider", fmt.Sprintf("invalid provider: %s", p))
 	}
 
-	factory, exists := registry[cfg.Provider]
-	if !exists {
-		return nil, fmt.Errorf("provider %q is not registered", cfg.Provider)
+	f, ok := registry[p]
+	if !ok {
+		return nil, fmt.Errorf("provider %q not registered", p)
 	}
 
-	return factory(cfg)
+	options := DefaultOptions()
+	for _, opt := range opts {
+		opt(&options)
+	}
+
+	if err := options.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid options: %w", err)
+	}
+
+	return f(options)
 }

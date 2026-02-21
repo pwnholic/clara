@@ -1,48 +1,41 @@
-// Package account provides normalized account types for trading.
+// Package account provides normalized account and position types for trading.
 package account
 
 import (
 	"fmt"
+	"time"
 
+	"github.com/pwnholic/clara/pkg/errors"
 	"github.com/pwnholic/clara/pkg/market"
+	"github.com/pwnholic/clara/pkg/order"
 	"github.com/quagmt/udecimal"
 )
 
-// Balance represents the balance of a single asset.
-type Balance struct {
-	// Asset is the asset symbol (e.g., "BTC", "USDT").
-	Asset string
-
-	// Free is the available balance for trading.
-	Free udecimal.Decimal
-
-	// Locked is the balance locked in open orders.
-	Locked udecimal.Decimal
-
-	// Total returns the total balance (Free + Locked).
-	Total udecimal.Decimal
-}
-
-// AccountInfo represents the account information.
-type AccountInfo struct {
-	// Balances is the list of asset balances.
-	Balances []Balance
-
-	// MarginLevel is the margin level for futures accounts.
-	MarginLevel udecimal.Decimal
-
-	// TotalAssetValue is the total account value in quote currency.
-	TotalAssetValue udecimal.Decimal
+// Info represents the account information.
+type Info struct {
+	Balances       []order.Balance   `json:"balances"`
+	MarginLevel    udecimal.Decimal  `json:"margin_level,omitempty"`
+	TotalValue     udecimal.Decimal  `json:"total_value"`
+	UpdateTime     time.Time         `json:"update_time"`
 }
 
 // GetBalance returns the balance for a specific asset.
-func (a AccountInfo) GetBalance(asset string) (*Balance, error) {
+func (a *Info) GetBalance(asset string) (*order.Balance, error) {
 	for i := range a.Balances {
 		if a.Balances[i].Asset == asset {
 			return &a.Balances[i], nil
 		}
 	}
-	return nil, fmt.Errorf("balance not found for asset: %s", asset)
+	return nil, fmt.Errorf("%w: asset %s", errors.ErrNotFound, asset)
+}
+
+// HasBalance returns true if the account has a non-zero balance for the asset.
+func (a *Info) HasBalance(asset string) bool {
+	b, err := a.GetBalance(asset)
+	if err != nil {
+		return false
+	}
+	return !b.Total().IsZero()
 }
 
 // PositionSide represents the position side for futures.
@@ -50,58 +43,58 @@ type PositionSide int
 
 const (
 	PositionSideBoth PositionSide = iota // One-way mode
-	PositionSideLong                     // Hedge mode - long
-	PositionSideShort                    // Hedge mode - short
+	PositionSideLong                      // Hedge mode - long
+	PositionSideShort                     // Hedge mode - short
 )
 
-// String returns the string representation of the position side.
+// String implements fmt.Stringer.
 func (p PositionSide) String() string {
 	switch p {
 	case PositionSideBoth:
-		return "both"
+		return "BOTH"
 	case PositionSideLong:
-		return "long"
+		return "LONG"
 	case PositionSideShort:
-		return "short"
+		return "SHORT"
 	default:
-		return "unknown"
+		return "UNKNOWN"
+	}
+}
+
+// MarginMode represents the margin mode for futures.
+type MarginMode int
+
+const (
+	MarginModeCross MarginMode = iota
+	MarginModeIsolated
+)
+
+// String implements fmt.Stringer.
+func (m MarginMode) String() string {
+	switch m {
+	case MarginModeCross:
+		return "CROSS"
+	case MarginModeIsolated:
+		return "ISOLATED"
+	default:
+		return "UNKNOWN"
 	}
 }
 
 // Position represents a futures position.
 type Position struct {
-	// Symbol is the trading pair.
-	Symbol market.Symbol
-
-	// Side is the position side (long/short/both).
-	Side PositionSide
-
-	// Quantity is the position quantity (positive for long, negative for short).
-	Quantity udecimal.Decimal
-
-	// EntryPrice is the average entry price.
-	EntryPrice udecimal.Decimal
-
-	// MarkPrice is the current mark price.
-	MarkPrice udecimal.Decimal
-
-	// UnrealizedPnL is the unrealized profit/loss.
-	UnrealizedPnL udecimal.Decimal
-
-	// RealizedPnL is the realized profit/loss.
-	RealizedPnL udecimal.Decimal
-
-	// Leverage is the current leverage.
-	Leverage udecimal.Decimal
-
-	// LiquidationPrice is the estimated liquidation price.
-	LiquidationPrice udecimal.Decimal
-
-	// Margin is the position margin.
-	Margin udecimal.Decimal
-
-	// MarginMode is the margin mode (cross/isolated).
-	MarginMode string
+	Symbol            market.Symbol    `json:"symbol"`
+	Side              PositionSide     `json:"side"`
+	Quantity          udecimal.Decimal `json:"quantity"`
+	EntryPrice        udecimal.Decimal `json:"entry_price"`
+	MarkPrice         udecimal.Decimal `json:"mark_price"`
+	UnrealizedPnL     udecimal.Decimal `json:"unrealized_pnl"`
+	RealizedPnL       udecimal.Decimal `json:"realized_pnl"`
+	Leverage          udecimal.Decimal `json:"leverage"`
+	LiquidationPrice  udecimal.Decimal `json:"liquidation_price"`
+	Margin            udecimal.Decimal `json:"margin"`
+	MarginMode        MarginMode       `json:"margin_mode"`
+	UpdateTime        time.Time        `json:"update_time"`
 }
 
 // IsLong returns true if this is a long position.
@@ -119,22 +112,54 @@ func (p Position) IsOpen() bool {
 	return !p.Quantity.IsZero()
 }
 
-// ROE (Return on Equity) calculates the return on equity percentage.
+// IsClosed returns true if the position is closed.
+func (p Position) IsClosed() bool {
+	return p.Quantity.IsZero()
+}
+
+// AbsQty returns the absolute quantity.
+func (p Position) AbsQty() udecimal.Decimal {
+	if p.Quantity.IsNeg() {
+		return p.Quantity.Neg()
+	}
+	return p.Quantity
+}
+
+// Value returns the notional value of the position.
+func (p Position) Value() udecimal.Decimal {
+	return p.AbsQty().Mul(p.MarkPrice)
+}
+
+// EntryValue returns the entry value of the position.
+func (p Position) EntryValue() udecimal.Decimal {
+	return p.AbsQty().Mul(p.EntryPrice)
+}
+
+// ROE (Return on Equity) calculates the return on equity percentage (0-1).
 func (p Position) ROE() (udecimal.Decimal, error) {
 	if p.Margin.IsZero() {
-		return udecimal.Decimal{}, fmt.Errorf("margin is zero")
+		return udecimal.Decimal{}, errors.NewValidationError("margin", "margin is zero")
 	}
 	return p.UnrealizedPnL.Div(p.Margin)
 }
 
-// Leverage represents leverage settings for a symbol.
-type Leverage struct {
-	// Symbol is the trading pair.
-	Symbol market.Symbol
+// PnLPercent returns the PnL as a percentage of entry value.
+func (p Position) PnLPercent() (udecimal.Decimal, error) {
+	entryValue := p.EntryValue()
+	if entryValue.IsZero() {
+		return udecimal.Decimal{}, errors.NewValidationError("entry_value", "entry value is zero")
+	}
+	return p.UnrealizedPnL.Div(entryValue)
+}
 
-	// Leverage is the current leverage multiplier.
-	Leverage udecimal.Decimal
+// LeverageSetting represents leverage settings for a symbol.
+type LeverageSetting struct {
+	Symbol      market.Symbol    `json:"symbol"`
+	Leverage    udecimal.Decimal `json:"leverage"`
+	MaxLeverage udecimal.Decimal `json:"max_leverage"`
+}
 
-	// MaxLeverage is the maximum allowed leverage.
-	MaxLeverage udecimal.Decimal
+// IsMaxed returns true if leverage is at maximum.
+func (l LeverageSetting) IsMaxed() bool {
+	return l.Leverage.GreaterThanOrEqual(l.MaxLeverage)
 }
